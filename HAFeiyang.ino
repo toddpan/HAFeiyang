@@ -1,14 +1,14 @@
 #include <ESP8266WiFi.h>
+#include <iostream>
 #include <WebSocketsClient.h>
 #include <ESP8266WebServer.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <WebSocketsClient.h>
 #include <PubSubClient.h>
+#include "SmartPointer.h"
 
-class HTTPClient;
-class MQTTClient;
-class FYWebSocketsClient;
+
 // WiFi参数
 const char* ssid = "你的WiFi网络名称";
 const char* password = "moto1984";
@@ -27,9 +27,6 @@ const char* mqttTopic = "要发布的MQTT主题";
 WebSocketsClient webSocket;
 ESP8266WebServer server(80);
 
-HTTPClient * HTTPClient_;
-MQTTClient * MQTTClient_;
-FYWebSocketsClient* FYWebSocketsClient_;
 
 /////////////////////////////////HTTPClient to call home assistan api/////////////////////////////////////
 class HTTPClient {
@@ -122,14 +119,14 @@ private:
   // void (*messageCallback)(const char*);
   std::function<void(const char*)> messageCallback;
 public:
-  FYWebSocketsClient(const char* _host, int _port, const char* _accessToken, std::function<void(const char*)> callback) {
+  FYWebSocketsClient(){}
+
+  void begin(const char* _host, int _port, const char* _accessToken, std::function<void(const char*)> callback) {
     messageCallback = callback;
     host = _host;
     port = _port;
     accessToken = _accessToken;
   }
-
-
   void connectWebSocket() {
     String auth = "Bearer " + String(accessToken);
     webSocket.setAuthorization(auth.c_str());
@@ -147,9 +144,16 @@ public:
     webSocket.sendTXT(message);
   }
 
+  void handleMQTTMessage(const char* topic, byte* payload, unsigned int length) {
+    // 处理收到的MQTT消息
+    // ...
+  }
+
   void loop() {
     webSocket.loop();
   }
+
+
 
 private:
   void handleWebSocketMessage(uint8_t* payload, size_t length) {
@@ -200,6 +204,11 @@ void connect() {
     mqttClient.publish(topic, payload);
   }
 
+  void handleMessageFromWebSocket(const char* message){
+    // 处理收到的Websocket消息
+      // ...
+  }
+
 private:
   void handleMQTTMessage(char* topic, byte* payload, unsigned int length) {
     // 处理收到的MQTT消息
@@ -214,7 +223,11 @@ class HAfeiyang{
   FYWebSocketsClient* webSocketClient_;
 public:
   HAfeiyang() {}
-
+  ~HAfeiyang() {
+    if(mqttClient_) {delete mqttClient_; }
+    if(httpclient_) {delete httpclient_; }
+    if(webSocketClient_) {delete webSocketClient_; }
+  }
   void begin() {
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
@@ -222,97 +235,101 @@ public:
       Serial.println("连接到WiFi网络...");
     }
 
-    auto function = [this](const char* message)->void {
-      // mqttClient.handleMessageFromWebSocket(message);
-    };
+    // websocket client api
+    webSocketClient_ = new FYWebSocketsClient();
+    webSocketClient_->begin(haHost, haPort, haAccessToken, [this](const char* message)->void {
+       mqttClient_->handleMessageFromWebSocket(message);
+    });
+    // 连接到Home Assistant的WebSocket接口
+    webSocketClient_->connectWebSocket();
+    // 发送WebSocket消息
+    const char* message = "Hello, Home Assistant!";
+    webSocketClient_->sendWebSocketMessage(message);
 
-   webSocketClient_ = new FYWebSocketsClient(haHost, haPort, haAccessToken,function);
+    // httpclient api
+    httpclient_ = new HTTPClient(haHost, haPort, haAccessToken);
 
-  // 连接到Home Assistant的WebSocket接口
-  webSocketClient_->connectWebSocket();
+    // mqtt client api
+    mqttClient_ = new MQTTClient();
+    mqttClient_->begin(mqttBroker, mqttPort, mqttClientId,[this](const char* topic, byte* payload, unsigned int length)->void {
+       webSocketClient_->handleMQTTMessage(topic,payload,length);
+    });
 
-  // 发送WebSocket消息
-  const char* message = "Hello, Home Assistant!";
-  webSocketClient_->sendWebSocketMessage(message);
 
+     
 
-    // WebSocketClient webSocketClient;
-    // webSocketClient.begin(haHost, haPort, haAccessToken, [this](const char* message) {
-    //   mqttClient.handleMessageFromWebSocket(message);
-    // });
+  // // 发送GET请求获取Home Assistant的信息
+  // DynamicJsonDocument respget = HTTPClient_->get("/api/states");
+  // Serial.println("GET 响应:");
+  // serializeJsonPretty(respget, Serial);
+  
 
-    // mqttClient.begin(mqttBroker, mqttPort, mqttClientId, &webSocketClient);
+  // // 发送POST请求更新Home Assistant的状态
+  // DynamicJsonDocument postData(128);
+  // postData["entity_id"] = "light.kitchen";
+  // postData["state"] = "on";
+  //   // 序列化JsonDocument为JSON字符串
+  // String jsonString;
+  // serializeJson(postData, jsonString);
+  // DynamicJsonDocument respoost = HTTPClient_->post("/api/services/light/turn_on", jsonString.c_str());
+  // Serial.println("POST 响应:");
+  // serializeJsonPretty(respoost, Serial);
+
   }
 
   void loop() {
     webSocketClient_->loop();
     mqttClient_->loop();
-
-    // 其他代码...
   }
 
   void sendWebSocketMessage(const char* message) {
-    // webSocketClient.sendMessage(message);
+     webSocketClient_->sendWebSocketMessage(message);
   }
 
   String sendHTTPRequest(const char* method, const char* url, const char* payload) {
     // if (strcmp(method, "GET") == 0) {
-    //   return httpClient.get(url);
+    //   return HTTPClient_->get(url);
     // }
     // else if (strcmp(method, "POST") == 0) {
-    //   return httpClient.post(url, payload);
+    //   return HTTPClient_->post(url, payload);
     // }
     // else {
     //   return "";
     // }
+
+
   }
 
   void publishMQTTMessage(const char* topic, const char* payload) {
     mqttClient_->publish(topic, payload);
   }
+
+  // void DataCallback(std::function<void(void)> callback)
+  // {
+  //   std::cout << "Start FuncCallback!" << std::endl;
+  //   callback();
+  //   std::cout << "End FuncCallback!" << std::endl;
+  // }
+  // DataCallback( [&](){
+  //     std::cout << "This is callback_handler";
+  // });
+
 };
 
+
+
+
 /////////////////////////////////main to call home assistan api/////////////////////////////////////
+SmartPointer<HAfeiyang> HAfeiyang_(new HAfeiyang());
 
 void setup() {
   Serial.begin(115200);
+  HAfeiyang_->begin();
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("连接到WiFi网络...");
-  }  
-
-  HTTPClient_ = new HTTPClient(haHost, haPort, haAccessToken);
-
-
-  // 发送GET请求获取Home Assistant的信息
-  DynamicJsonDocument respget = HTTPClient_->get("/api/states");
-  Serial.println("GET 响应:");
-  serializeJsonPretty(respget, Serial);
-  
-
-  // 发送POST请求更新Home Assistant的状态
-  DynamicJsonDocument postData(128);
-  postData["entity_id"] = "light.kitchen";
-  postData["state"] = "on";
-    // 序列化JsonDocument为JSON字符串
-  String jsonString;
-  serializeJson(postData, jsonString);
-  DynamicJsonDocument respoost = HTTPClient_->post("/api/services/light/turn_on", jsonString.c_str());
-  Serial.println("POST 响应:");
-  serializeJsonPretty(respoost, Serial);
-
-
-  // mqtt client
-  MQTTClient_ = new MQTTClient();
-  // MQTTClient_->begin(mqttBroker, mqttPort, mqttClientId);
 }
 
 //std::function<void(char*, uint8_t*, unsigned int)> callback
 void loop() {
   // put your main code here, to run repeatedly:
-  // // 处理WebSocket连接和消息的逻辑
-  // FYWebSocketsClient_->loop();
-  // MQTTClient_->loop();
+  HAfeiyang_->loop();
 }
