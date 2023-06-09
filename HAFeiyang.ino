@@ -8,20 +8,20 @@
 #include <PubSubClient.h>
 #include "SmartPointer.h"
 
-
 // WiFi参数
-const char* ssid = "你的WiFi网络名称";
+const char* ssid = "Dafu9039";
 const char* password = "moto1984";
 
 // Home Assistant WebSocket参数
-const char* haHost = "192.168.31.62";
-const int haPort = 8123;
-const char* haAccessToken = "你的Home Assistant访问令牌";
+const char* haHost = "edgetest.thundercomm.com";
+const int haPort = 4089;
+const char* haAccessToken = "uMEh5o4vxTMTmWaPpspn3mkGWb95Yxu9tplK1Y9b3ZY";
 
-const char* mqttBroker = "MQTT代理服务器地址";
-const int mqttPort = 1883;
-const char* mqttClientId = "MQTT客户端ID";
-const char* mqttTopic = "要发布的MQTT主题";
+//mqtt 客户端和服务器
+const char* mqttBroker = "mqtt1.feiyangkeji.com";
+const int mqttPort = 1884;
+const char* mqttClientId = "u5Yxu9tplK1Y9b3ZY";
+const char* mqttTopic = "/HAFeiyang/tts";
 
 // WebSocket客户端和HTTP服务器
 WebSocketsClient webSocket;
@@ -37,12 +37,12 @@ private:
   const char* accessToken;
 
 public:
-  HTTPClient(const char* _host, int _port, const char* _accessToken) {
+  HTTPClient() {}
+  void begin(const char* _host, int _port, const char* _accessToken) {
     host = _host;
     port = _port;
     accessToken = _accessToken;
   }
-
   DynamicJsonDocument get(const char* path) {
     DynamicJsonDocument response(1024);
 
@@ -180,13 +180,14 @@ public:
     mqttClient.setCallback([this](char* topic, byte* payload, unsigned int length) {
       handleMQTTMessage(topic, payload, length);
     });
-    connect();
+     connect();
   }
 
   void loop() {
     mqttClient.loop();
   }
-void connect() {
+
+  void connect() {
     while (!mqttClient.connected()) {
       if (mqttClient.connect(mqttClientId)) {
         Serial.println("连接到MQTT代理服务器...");
@@ -222,7 +223,11 @@ class HAfeiyang{
   HTTPClient* httpclient_;
   FYWebSocketsClient* webSocketClient_;
 public:
-  HAfeiyang() {}
+  HAfeiyang() {
+      webSocketClient_ = new FYWebSocketsClient();
+      mqttClient_ = new MQTTClient();
+      httpclient_ = new HTTPClient();
+  }
   ~HAfeiyang() {
     if(mqttClient_) {delete mqttClient_; }
     if(httpclient_) {delete httpclient_; }
@@ -235,25 +240,28 @@ public:
       Serial.println("连接到WiFi网络...");
     }
 
-    // websocket client api
-    webSocketClient_ = new FYWebSocketsClient();
+ 
+    // mqtt client api
+    mqttClient_->begin(mqttBroker, mqttPort, mqttClientId,[this](const char* topic, byte* payload, unsigned int length)->void {
+       webSocketClient_->handleMQTTMessage(topic,payload,length);
+    });
+
+   // websocket client api
     webSocketClient_->begin(haHost, haPort, haAccessToken, [this](const char* message)->void {
        mqttClient_->handleMessageFromWebSocket(message);
     });
     // 连接到Home Assistant的WebSocket接口
     webSocketClient_->connectWebSocket();
-    // 发送WebSocket消息
-    const char* message = "Hello, Home Assistant!";
-    webSocketClient_->sendWebSocketMessage(message);
+    // // 发送WebSocket消息
+    // const char* message = "Hello, Home Assistant!";
+    // webSocketClient_->sendWebSocketMessage(message);
 
-    // httpclient api
-    httpclient_ = new HTTPClient(haHost, haPort, haAccessToken);
+    // // httpclient api
+     httpclient_->begin(haHost, haPort, haAccessToken);
 
-    // mqtt client api
-    mqttClient_ = new MQTTClient();
-    mqttClient_->begin(mqttBroker, mqttPort, mqttClientId,[this](const char* topic, byte* payload, unsigned int length)->void {
-       webSocketClient_->handleMQTTMessage(topic,payload,length);
-    });
+    // 
+
+
 
 
      
