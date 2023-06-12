@@ -7,6 +7,7 @@
 #include <WebSocketsClient.h>
 #include <PubSubClient.h>
 #include "SmartPointer.h"
+#include "HAHttpApi.h"
 
 // WiFi参数
 const char* ssid = "Dafu9039";
@@ -43,6 +44,49 @@ public:
     port = _port;
     accessToken = _accessToken;
   }
+  
+  // GET请求示例：获取所有实体状态
+  DynamicJsonDocument getAllStates() {
+    return get("/api/states");
+  }
+
+  //Returns the current configuration as JSON.
+  DynamicJsonDocument getConfig() {
+  return get("/api/config");
+ }
+
+ void getConfig( Config& config)
+ {
+    DynamicJsonDocument response = getConfig();
+    config.parse(response);
+
+    Serial.println("Location Name: " + config.locationName);
+    Serial.println("Elevation: " + String(config.elevation));
+    Serial.println("Time Zone: " + config.timeZone);
+    Serial.println("Version: " + config.version);
+
+    Serial.println("Components:");
+    for (const String& component : config.components) {
+      Serial.println(component);
+    }
+
+    Serial.println("Length Unit: " + config.unitSystem.length);
+    Serial.println("Temperature Unit: " + config.unitSystem.temperature);
+
+    Serial.println("Whitelist Directories:");
+    for (const String& dir : config.whitelistExternalDirs) {
+      Serial.println(dir);
+    }
+  }
+  
+  // POST请求示例：调用服务
+  DynamicJsonDocument callService(const char* domain, const char* service, const char* data) {
+    char path[100];
+    snprintf(path, sizeof(path), "/api/services/%s/%s", domain, service);
+    return post(path, data);
+  }
+
+private:
   DynamicJsonDocument get(const char* path) {
     DynamicJsonDocument response(1024);
 
@@ -106,6 +150,7 @@ public:
     return response;
   }
 };
+
 
 /////////////////////////////////FYWebSocketsClient to call home assistan api/////////////////////////////////////
 
@@ -333,6 +378,13 @@ SmartPointer<HAfeiyang> HAfeiyang_(new HAfeiyang());
 void setup() {
   Serial.begin(115200);
   HAfeiyang_->begin();
+
+
+// HTTPClient httpClient;
+// httpClient.begin("localhost", 8123, "YOUR_ACCESS_TOKEN");
+
+// DynamicJsonDocument response = httpClient.getApiStatus();
+// Serial.println(response["message"].as<String>());
 
 }
 
