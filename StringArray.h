@@ -39,6 +39,10 @@ public:
     }
   }
 
+  void clear() {
+    size = 0;
+  }
+
   String operator[](int index) const {
     if (index >= 0 && index < size) {
       return data[index];
