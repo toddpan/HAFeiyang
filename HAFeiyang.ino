@@ -543,80 +543,236 @@ public:
     sendWebSocketMessage((const char*)payloadStr.c_str());
   }
 
+  //Unsubscribing from events
+  //You can unsubscribe from previously created subscriptions. Pass the id of the original subscription command as value to the subscription field.
+  //The server will respond with a result message to indicate that unsubscribing was successful.
+  void unsubscribeEvents(int subscriptionId) {
+  // Increment the ID for each unsubscribe_events command
+  int unsubscribeId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = unsubscribeId;
+  message["type"] = "unsubscribe_events";
+  message["subscription"] = subscriptionId;
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
  //You can also subscribe to one or more triggers with subscribe_trigger. These are the same triggers syntax as used for automation triggers. You can define one or a list of triggers.
  //subscribeTrigger("state", "binary_sensor.motion_occupancy", "off", "on");
  void subscribeTrigger(const std::string& platform, const std::string& entityId, const std::string& fromState, const std::string& toState) {
+    // Construct the JSON message
+    DynamicJsonDocument message(256);
+    message["id"] = getNextId();
+    message["type"] = "subscribe_trigger";
+
+    // Create the trigger objectS
+    JsonObject trigger = message.createNestedObject("trigger");
+    trigger["platform"] = platform;
+    trigger["entity_id"] = entityId;
+    trigger["from"] = fromState;
+    trigger["to"] = toState;
+
+    String payloadStr;
+    serializeJson(message, payloadStr);
+    // Send the message
+    sendWebSocketMessage((const char*)payloadStr.c_str());
+ }
+
+ void fireEvent(const std::string& eventType, const JsonDocument& eventData) {
+  int eventId = getNextId();
+
   // Construct the JSON message
   DynamicJsonDocument message(256);
-  message["id"] = getNextId();
-  message["type"] = "subscribe_trigger";
+  message["id"] = eventId;
+  message["type"] = "fire_event";
+  message["event_type"] = eventType;
+  message["event_data"] = eventData;
 
-  // Create the trigger object
-  JsonObject trigger = message.createNestedObject("trigger");
-  trigger["platform"] = platform;
-  trigger["entity_id"] = entityId;
-  trigger["from"] = fromState;
-  trigger["to"] = toState;
+  String payloadStr;
+  serializeJson(message, payloadStr);
 
   // Send the message
-  sendWebSocketMessage(serializeJson(message));
+  sendWebSocketMessage((const char*)payloadStr.c_str());
 }
+
+// Calling a service
+// This will call a service in Home Assistant. Right now there is no return value. The client can listen to state_changed events if it is interested in changed entities as a result of a service call.
+void callService(const std::string& domain, const std::string& service, const JsonDocument& serviceData, const JsonDocument& target) {
+  int serviceId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = serviceId;
+  message["type"] = "call_service";
+  message["domain"] = domain;
+  message["service"] = service;
+  message["service_data"] = serviceData;
+  message["target"] = target;
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
+// Fetching states
+// This will get a dump of all the current states in Home Assistant.
+void fetchStates() {
+  int fetchId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = fetchId;
+  message["type"] = "get_states";
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
+// Fetching config
+// This will get a dump of the current config in Home Assistant.
+void fetchConfig() {
+  int fetchId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = fetchId;
+  message["type"] = "get_config";
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
+// Fetching services
+// This will get a dump of the current services in Home Assistant.
+void fetchServices() {
+  int fetchId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = fetchId;
+  message["type"] = "get_services";
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
+// Fetching panels
+// This will get a dump of the current registered panels in Home Assistant.
+void fetchPanels() {
+  int fetchId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = fetchId;
+  message["type"] = "get_panels";
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
+// Pings and Pongs
+// The API supports receiving a ping from the client and returning a pong. This serves as a heartbeat to ensure the connection is still alive:
+void sendPing() {
+  int pingId = getNextId();
+
+  // Construct the JSON message
+  DynamicJsonDocument message(256);
+  message["id"] = pingId;
+  message["type"] = "ping";
+
+  String payloadStr;
+  serializeJson(message, payloadStr);
+
+  // Send the message
+  sendWebSocketMessage((const char*)payloadStr.c_str());
+}
+
 private:
   void handleWebSocketMessage(uint8_t* payload, size_t length) {
-
-    // 处理收到的WebSocket消息的逻辑
-    // 调用回调函数处理消息
-    if (messageCallback != nullptr) {
-      messageCallback(reinterpret_cast<const char*>(payload));
-    }
-
-    // Parse the incoming JSON message
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, payload, length);
-
-    // Check if parsing was successful
-    if (error) {
-      // Error handling
-      return;
-    }
-
-    // Check the message type
-    std::string messageType = message["type"].as<std::string>();
-    if (messageType == "result") {
-      // Check if the result is for the subscribe_events command
-      int messageId = doc["id"];
-      if (messageId == currentSubscribeEventsId) {
-        bool success = doc["success"];
-        if (success) {
-          // Subscription is active
-          // You can handle the successful subscription here
-        } else {
-          // Subscription failed
-          // You can handle the failed subscription here
-        }
+      // 处理收到的WebSocket消息的逻辑
+      if (messageCallback != nullptr) {
+        messageCallback(reinterpret_cast<const char*>(payload));
       }
-    } else if (messageType == "event") {
-      // Handle other types of events
-      // ...
-    }else if (messageType == "trigger") {
-      // Handle trigger message
-      int messageId = message["id"].as<int>();
-      JsonObject trigger = message["event"]["variables"]["trigger"].as<JsonObject>();
+      // Parse the incoming JSON message
+      DynamicJsonDocument doc(1024);
+      DeserializationError error = deserializeJson(doc, payload, length);
 
-      // Extract trigger information
-      std::string triggerId = trigger["id"].as<std::string>();
-      std::string platform = trigger["platform"].as<std::string>();
-      std::string entityId = trigger["entity_id"].as<std::string>();
-      // Extract more trigger information as needed
+      // Check if parsing was successful
+      if (error) {
+        // Error handling
+        return;
+      }
 
-      // Do something with the trigger information
-      // Example: Print trigger details
-      Serial.println("Received trigger message:");
-      Serial.println("Trigger ID: " + triggerId);
-      Serial.println("Platform: " + platform);
-      Serial.println("Entity ID: " + entityId);
-      // Print more trigger details as needed
+      // Check the message type
+      std::string messageType = doc["type"].as<std::string>();
+      if (messageType == "result") {
+        // Check if the result is for the subscribe_events command
+        int messageId = doc["id"];
+        if (messageId == currentSubscribeEventsId) {
+          bool success = doc["success"];
+          if (success) {
+            // Subscription is active
+            // You can handle the successful subscription here
+          } else {
+            // Subscription failed
+            // You can handle the failed subscription here
+          }
+        }
+      } else if (messageType == "event") {
+        // Handle other types of events
+        // ...
+      }else if (messageType == "trigger") {
+        // Handle trigger message
+        int messageId = doc["id"].as<int>();
+        JsonObject trigger = doc["event"]["variables"]["trigger"].as<JsonObject>();
+
+        // Extract trigger information
+        std::string triggerId = trigger["id"].as<std::string>();
+        std::string platform = trigger["platform"].as<std::string>();
+        std::string entityId = trigger["entity_id"].as<std::string>();
+        // Extract more trigger information as needed
+
+        // Do something with the trigger information
+        // Example: Print trigger details
+        // Serial.println("Received trigger message:");
+        // Serial.println("Trigger ID: " + triggerId);
+        // Serial.println("Platform: " + platform);
+        // Serial.println("Entity ID: " + entityId);
+        // Print more trigger details as needed
+    }else if (messageType == "ping") {
+    // Construct the pong message
+    // DynamicJsonDocument pongMessage(256);
+    // pongMessage["id"] = messageId;
+    // pongMessage["type"] = "pong";
+
+    // String pongPayloadStr;
+    // serializeJson(pongMessage, pongPayloadStr);
+
+    // // Send the pong message back to the client
+    // sendWebSocketMessage((const char*)pongPayloadStr.c_str());
+
   }
+ }
 };
 
 /////////////////////////////////MQTTClient to call home assistan api/////////////////////////////////////
